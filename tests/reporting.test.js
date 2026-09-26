@@ -11,7 +11,7 @@ function fakeStore(settings = {}) {
     get: (key, fallback) => state[key] ?? fallback,
     set: async (key, value) => { state[key] = value; },
     push: async (type, data) => { events.push({type, data}); },
-    settings: () => ({symbol: state.symbol || 'BTCUSDT', leverage: 3, marginMode: 'ISOLATED', positionMode: 'HEDGE'}),
+    settings: () => ({symbol: state.symbol || 'BTCUSDT', timeframes: state.timeframes || ['1m', '3m'], leverage: 3, marginMode: 'ISOLATED', positionMode: 'HEDGE'}),
     recentSignals: n => (state.signals || []).slice(-n),
     events,
     state
@@ -74,7 +74,8 @@ test('configured and persisted Telegram chat IDs are selected in the correct ord
 
 test('rendered report contains truthful current signal confidence and open-position PnL', async () => {
   const store = fakeStore({symbol: 'BTCUSDT', autoTrade: true, scanOn: true, killSwitch: false});
-  store.state.signals = [{symbol: 'BTCUSDT', direction: 'LONG', confidence: 84, at: '2026-09-26T18:00:00.000Z'}];
+  store.state.timeframes = ['5m', '1h'];
+  store.state.signals = [{symbol: 'BTCUSDT', direction: 'LONG', confidence: 84, selectedTimeframes: ['5m', '1h'], timeframes: { '5m': {direction: 'LONG', confidence: 84}, '1h': {direction: 'NEUTRAL', confidence: 0} }, at: '2026-09-26T18:00:00.000Z'}];
   const report = await buildTraderReport({
     store,
     client: {positions: async () => [{symbol: 'BTCUSDT', side: 'LONG', qty: '0.01', entryPrice: '60000', markPrice: '60125', unrealizedPNL: '1.25'}]},
@@ -84,6 +85,7 @@ test('rendered report contains truthful current signal confidence and open-posit
   });
   const text = renderTraderReport(report);
   assert.match(text, /BTCUSDT: LONG \| confidence=84%/);
+  assert.match(text, /timeframes=5m,1h/);
   assert.match(text, /Trading: blocked/);
   assert.match(text, /PnL=\+1\.25 \(unrealizedPNL\)/);
   assert.doesNotMatch(text, /No open position/);

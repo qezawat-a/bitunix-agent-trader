@@ -1,7 +1,8 @@
 import {Telegraf} from 'telegraf';
 import {config} from '../config.js';
 import {extractPriceSymbol,isCurrentPriceQuery,renderTicker} from '../market/ticker.js';
-const HELP = `Salam. Agent online ast.\n\nCommands:\n/start /help\n/status /settings\n/price [SYMBOL] /ticker [SYMBOL]\n/balance /signal /positions /orders /history\n/scan_on /scan_off /report_on /report_off\n/auto_trade /pause /kill_switch\n/set <key> <value>\n\nAlias: /tset <key> <value> ham supported ast.\nChat-e adi ham be agent mire.`;
+import {parseTimeframes} from '../trading/timeframes.js';
+const HELP = `Salam. Agent online ast.\n\nCommands:\n/start /help\n/status /settings\n/price [SYMBOL] /ticker [SYMBOL]\n/timeframes <intervals> (or /set timeframes <intervals>)\n/balance /signal /positions /orders /history\n/scan_on /scan_off /report_on /report_off\n/auto_trade /pause /kill_switch\n/set <key> <value>\n\nValid Bitunix intervals: 1m,3m,5m,15m,30m,1h,2h,4h,6h,8h,12h,1d,3d,1w,1M\n\nAlias: /tset <key> <value> ham supported ast.\nChat-e adi ham be agent mire.`;
 const format = value => typeof value === 'string' ? value : `\\\`\\\`\\\`json\n${JSON.stringify(value, null, 2)}\n\\\`\\\`\\\``;
 export const resolveReportChatId = (store, telegramConfig) => String(store.get('telegramChatId', telegramConfig.chatId || telegramConfig.userId || '') || '');
 export async function persistTelegramChatId(store, chatId) { if (chatId != null && String(chatId)) await store.set('telegramChatId', String(chatId)); }
@@ -32,6 +33,7 @@ export function startTelegram({agent, tools, store}) {
   command(['signal'], async ctx => reply(ctx, format(await runTool('market_signal'))));
   command(['positions'], async ctx => reply(ctx, format(await runTool('positions'))));
   command(['price', 'ticker'], async ctx => { const symbol = extractPriceSymbol(String(ctx.message?.text || ''), store.get('symbol')); return reply(ctx, renderTicker(await runTool('market_ticker', {symbol}))); });
+  command(['timeframes', 'timeframe'], async ctx => { const raw = String(ctx.message?.text || '').trim().split(/\s+/).slice(1).join(','); if (!raw) return reply(ctx, `Current timeframes: ${parseTimeframes(store.get('timeframes')).join(',')}`); return reply(ctx, format(await runTool('set_setting', {key: 'timeframes', value: raw}))); });
   command(['orders'], async ctx => reply(ctx, format(await runTool('order_history'))));
   command(['history'], ctx => reply(ctx, format(store.recentSignals())));
   command(['scan_on'], async ctx => { await store.set('scanOn', true); await reply(ctx, 'scan_on: ok'); });

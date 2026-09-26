@@ -30,7 +30,11 @@ Telegram token, user ID, Neon URL, LLM credential va Bitunix keys ro faghat dar 
 
 ## Telegram commands
 
-`/start`, `/help`, `/status`, `/settings`, `/balance`, `/signal`, `/positions`, `/orders`, `/history`, `/scan_on`, `/scan_off`, `/report_on`, `/report_off`, `/auto_trade`, `/pause`, `/kill_switch`, `/set <key> <value>`.
+`/start`, `/help`, `/status`, `/settings`, `/price [SYMBOL]`, `/ticker [SYMBOL]`, `/timeframes <intervals>`, `/balance`, `/signal`, `/positions`, `/orders`, `/history`, `/scan_on`, `/scan_off`, `/report_on`, `/report_off`, `/auto_trade`, `/pause`, `/kill_switch`, `/set <key> <value>`.
+
+### Timeframes
+
+The existing scanner is multi-timeframe: it requests one Bitunix kline series per selected interval, applies the existing strategies per interval, then combines the same rows with the existing timeframe weights and agreement logic. The default selection remains `1m,3m,5m,15m` (the values previously hard-coded in `main.js`). Configure it at startup with `DEFAULT_TIMEFRAMES=1m,5m,15m,1h`, or persist it at runtime with `/timeframes 1m 5m 15m 1h` or `/set timeframes 1m,5m,15m,1h`. Valid Bitunix values are `1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M`; duplicates are removed and invalid values are rejected. `/status`, `/settings`, stored signal records, AI `market_signal` output, and periodic reports expose the selected timeframes, so displayed configuration and requested klines cannot silently diverge.
 
 Chat-e adi ham be agent mire. Agent bayad baraye action-haye risk-dar tool-e مشخص va policy ro رعایت کند.
 
@@ -63,6 +67,7 @@ In defaults recommendation hastand, na guarantee-e سود. AI mitavanad signal r
 - [API introduction](https://www.bitunix.com/api-docs/futures/common/introduction.html)
 - [Signature](https://www.bitunix.com/api-docs/futures/common/sign.html)
 - [Place order](https://www.bitunix.com/api-docs/futures/trade/place_order.html)
+- [Get Kline](https://www.bitunix.com/api-docs/futures/market/get_kline.html)
 - [WebSocket](https://www.bitunix.com/api-docs/futures/websocket/prepare/WebSocket.html)
 - [Bitunix OpenAPI repository](https://github.com/BitunixOfficial/open-api)
 

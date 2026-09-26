@@ -1,3 +1,5 @@
+import {parseTimeframes} from '../trading/timeframes.js';
+
 function asNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
@@ -63,12 +65,15 @@ export async function buildTraderReport({store, client, canTrade, liveTrading = 
       symbol: settings.symbol,
       leverage: settings.leverage,
       marginMode: settings.marginMode,
-      positionMode: settings.positionMode
+      positionMode: settings.positionMode,
+      timeframes: parseTimeframes(settings.timeframes)
     },
     signal: latestSignal ? {
       symbol: latestSignal.symbol || settings.symbol,
       direction: latestSignal.direction || 'NEUTRAL',
       confidence: asNumber(latestSignal.confidence),
+      timeframes: latestSignal.selectedTimeframes || Object.keys(latestSignal.timeframes || {}),
+      timeframeResults: latestSignal.timeframes || {},
       recordedAt: latestSignal.at || null
     } : null,
     positions: extractOpenPositions(rawPositions)
@@ -95,12 +100,12 @@ export function renderTraderReport(report) {
     `- Bot: ${status.bot}`,
     `- Trading: ${status.trading} | liveTrading=${status.liveTrading} | killSwitch=${status.killSwitch}`,
     `- autoTrade=${status.autoTrade} | scanOn=${status.scanOn} | reportOn=${status.reportOn}`,
-    `- Symbol: ${status.symbol} | leverage=${status.leverage} | margin=${status.marginMode} | positionMode=${status.positionMode}`,
+    `- Symbol: ${status.symbol} | timeframes=${(status.timeframes || []).join(',') || 'unavailable'} | leverage=${status.leverage} | margin=${status.marginMode} | positionMode=${status.positionMode}`,
     '',
     'Current signal:'
   ];
   if (signal) {
-    lines.push(`- ${signal.symbol}: ${signal.direction} | confidence=${confidenceText(signal.confidence)}${signal.recordedAt ? ` | recorded=${signal.recordedAt}` : ''}`);
+    lines.push(`- ${signal.symbol}: ${signal.direction} | confidence=${confidenceText(signal.confidence)} | timeframes=${signal.timeframes.join(',') || 'unavailable'}${signal.recordedAt ? ` | recorded=${signal.recordedAt}` : ''}`);
   } else {
     lines.push('- No signal recorded yet.');
   }
