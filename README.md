@@ -36,6 +36,8 @@ Telegram token, user ID, Neon URL, LLM credential va Bitunix keys ro faghat dar 
 
 The existing scanner is multi-timeframe: it requests one Bitunix kline series per selected interval, applies the existing strategies per interval, then combines the same rows with the existing timeframe weights and agreement logic. The default selection remains `1m,3m,5m,15m` (the values previously hard-coded in `main.js`). Configure it at startup with `DEFAULT_TIMEFRAMES=1m,5m,15m,1h`, or persist it at runtime with `/timeframes 1m 5m 15m 1h` or `/set timeframes 1m,5m,15m,1h`. Valid Bitunix values are `1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M`; duplicates are removed and invalid values are rejected. `/status`, `/settings`, stored signal records, AI `market_signal` output, and periodic reports expose the selected timeframes, so displayed configuration and requested klines cannot silently diverge.
 
+`/balance` uses the authenticated official endpoint `GET /api/v1/futures/account?marginCoin=USDT` (not the old symbol-specific `/get_single_account` path). Its query is included in the REST signature. The response displays Bitunix fields such as `available`, `frozen`, `margin`, `transfer`, `crossUnrealizedPNL`, `isolationUnrealizedPNL`, `bonus`, and `positionMode`; `total`/`equity` are shown only if the API actually supplies them. Bitunix application-level nonzero codes are errors even when HTTP status is 200, and empty/unknown data produces a truthful no-data message.
+
 Chat-e adi ham be agent mire. Agent bayad baraye action-haye risk-dar tool-e مشخص va policy ro رعایت کند.
 
 `/tset` نیز به‌عنوان alias برای `/set` ثبت شده است؛ پیام `Unknown command` قبلی به این دلیل بود که commandهای README در کد ثبت نشده بودند. `/start` و `/help` اکنون فهرست کامل commandها را نشان می‌دهند.
@@ -68,6 +70,7 @@ In defaults recommendation hastand, na guarantee-e سود. AI mitavanad signal r
 - [Signature](https://www.bitunix.com/api-docs/futures/common/sign.html)
 - [Place order](https://www.bitunix.com/api-docs/futures/trade/place_order.html)
 - [Get Kline](https://www.bitunix.com/api-docs/futures/market/get_kline.html)
+- [Get Single Account](https://www.bitunix.com/api-docs/futures/account/get_single_account.html)
 - [WebSocket](https://www.bitunix.com/api-docs/futures/websocket/prepare/WebSocket.html)
 - [Bitunix OpenAPI repository](https://github.com/BitunixOfficial/open-api)
 
