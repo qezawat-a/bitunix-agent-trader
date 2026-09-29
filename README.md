@@ -40,7 +40,9 @@ The existing scanner is multi-timeframe: it requests one Bitunix kline series pe
 
 Chat-e adi ham be agent mire. Agent bayad baraye action-haye risk-dar tool-e مشخص va policy ro رعایت کند.
 
-`/tset` نیز به‌عنوان alias برای `/set` ثبت شده است؛ پیام `Unknown command` قبلی به این دلیل بود که commandهای README در کد ثبت نشده بودند. `/start` و `/help` اکنون فهرست کامل commandها را نشان می‌دهند.
+`/tset` نیز به‌عنوان alias برای `/set` ثبت شده است؛ پیام `Unknown command` قبلی به این دلیل بود که commandهای README در کد ثبت نشده بودند. `/start` و `/help` اکنون فهرست commandها را نشان می‌دهند.
+
+At bot startup, Telegraf registers every implemented slash command (including aliases) with Telegram's built-in command menu using the default scope. Restart or redeploy the bot to apply menu changes. This uses `setMyCommands`; no Mini App, `web_app`, or URL is configured.
 
 ## LLM troubleshooting
 
