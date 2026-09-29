@@ -3,6 +3,16 @@ import {parseTimeframes} from './timeframes.js';
 
 const weights = {'1m': .5, '3m': .8, '5m': 1, '15m': 1.5, '30m': 2, '1h': 2.5, '2h': 2.8, '4h': 3, '1d': 4};
 
+export function normalizeKline(row) {
+  return {
+    open: +(row.o ?? row.open),
+    high: +(row.h ?? row.high),
+    low: +(row.l ?? row.low),
+    close: +(row.c ?? row.close),
+    volume: +(row.baseVol ?? row.a ?? row.volume ?? 0)
+  };
+}
+
 export async function scan(client, symbol, timeframes, opts = {}) {
   const selectedTimeframes = parseTimeframes(timeframes);
   const rows = {};
@@ -11,9 +21,7 @@ export async function scan(client, symbol, timeframes, opts = {}) {
   for (const tf of selectedTimeframes) {
     try {
       const raw = await client.klines(symbol, tf, 200);
-      const candles = (raw || []).map(x => ({
-        open: +(x.o ?? x.open), high: +(x.h ?? x.high), low: +(x.l ?? x.low), close: +(x.c ?? x.close), volume: +(x.a ?? (x.volume || 0))
-      })).filter(x => x.close > 0);
+      const candles = (raw || []).map(normalizeKline).filter(x => x.close > 0);
       const result = strategies(candles);
       const eligible = result.out.filter(x => x.side !== 'NEUTRAL' && x.confidence >= Number(opts.tfMinConfidence ?? 60));
       const counts = {LONG: eligible.filter(x => x.side === 'LONG'), SHORT: eligible.filter(x => x.side === 'SHORT')};

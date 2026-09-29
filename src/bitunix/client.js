@@ -1,6 +1,8 @@
 import { config, canTrade } from '../config.js';
 import { nonce, signRest } from './sign.js';
 
+const NOT_ARMED = 'TRADING_NOT_ARMED: set LIVE_TRADING=1 and ARM_TRADING=1 after verification';
+
 function firstBalanceRow(raw) {
   if (Array.isArray(raw)) return raw[0] || null;
   if (Array.isArray(raw?.data)) return raw.data[0] || null;
@@ -27,10 +29,33 @@ export function normalizeAccountBalance(raw, marginCoin = 'USDT') {
   };
 }
 
+function preparePlaceOrder(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('BITUNIX_INVALID_ORDER: expected a JSON object');
+  const order = {...body};
+  for (const field of ['symbol', 'qty']) {
+    if (typeof order[field] !== 'string' || !order[field].trim()) throw new Error(`BITUNIX_INVALID_ORDER: ${field} must be a non-empty string`);
+  }
+  if (!['BUY', 'SELL'].includes(order.side)) throw new Error('BITUNIX_INVALID_ORDER: side must be BUY or SELL');
+  if (!['OPEN', 'CLOSE'].includes(order.tradeSide)) throw new Error('BITUNIX_INVALID_ORDER: tradeSide must be OPEN or CLOSE');
+  if (!['MARKET', 'LIMIT'].includes(order.orderType)) throw new Error('BITUNIX_INVALID_ORDER: orderType must be MARKET or LIMIT');
+  if (order.tradeSide === 'CLOSE' && (typeof order.positionId !== 'string' || !order.positionId.trim())) {
+    throw new Error('BITUNIX_INVALID_ORDER: positionId is required when tradeSide is CLOSE');
+  }
+  if (order.orderType === 'LIMIT') {
+    if (typeof order.price !== 'string' || !order.price.trim()) throw new Error('BITUNIX_INVALID_ORDER: LIMIT orders require price as a string');
+    if (order.effect == null) order.effect = 'GTC';
+    if (!['IOC', 'FOK', 'GTC', 'POST_ONLY'].includes(order.effect)) {
+      throw new Error('BITUNIX_INVALID_ORDER: effect must be IOC, FOK, GTC, or POST_ONLY');
+    }
+  }
+  if (order.price !== undefined && typeof order.price !== 'string') throw new Error('BITUNIX_INVALID_ORDER: price must be a string');
+  return order;
+}
+
 export class BitunixClient {
   constructor(opts={}) { this.cfg = {...config.bitunix, ...opts}; this.fetch = opts.fetch || globalThis.fetch; }
   async request(path, {method='GET', query={}, body, auth=false, write=false, signal}={}) {
-    if (write && !canTrade()) throw new Error('TRADING_NOT_ARMED: set LIVE_TRADING=1 and ARM_TRADING=1 after verification');
+    if (write && !canTrade()) throw new Error(NOT_ARMED);
     const url = new URL(path, this.cfg.restUrl);
     for (const [k,v] of Object.entries(query)) if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
     const headers = {'Content-Type':'application/json','language':'en-US'};
@@ -41,35 +66,47 @@ export class BitunixClient {
     }
     const res = await this.fetch(url, {method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal});
     const text = await res.text(); let data; try { data = text ? JSON.parse(text) : {}; } catch { data = {raw:text}; }
-    if (!res.ok || (data && data.code !== undefined && Number(data.code) !== 0)) {
+    const hasCode = data && typeof data === 'object' && !Array.isArray(data) && Object.hasOwn(data, 'code') && data.code !== undefined && data.code !== null;
+    const validCode = hasCode && Number.isFinite(Number(data.code));
+    if (!res.ok || !validCode || Number(data.code) !== 0) {
       const detail = data?.msg || data?.message || data?.error?.message || text || res.statusText;
       const safe = String(detail).replace(/[\r\n]+/g, ' ').replace(/authorization\s*[:=]\s*bearer\s+\S+/gi, 'authorization [redacted]').replace(/(api[-_ ]?key|bearer)\s*[:=]?\s*\S+/gi, '$1 [redacted]');
-      throw new Error(`Bitunix ${res.status} ${path} code=${data?.code ?? 'http'}: ${safe}`);
+      throw new Error(`Bitunix ${res.status} ${path} code=${validCode ? data.code : 'missing/invalid'}: ${safe}`);
     }
     return data?.data ?? data;
   }
   tickers(symbol) { return this.request('/api/v1/futures/market/tickers', {query: symbol ? {symbols: symbol} : {}}); }
   ticker(symbol) { return this.tickers(symbol); }
-  depth(symbol, limit=20) { return this.request('/api/v1/futures/market/depth', {query:{symbol,limit}}); }
+  depth(symbol, limit=5) { return this.request('/api/v1/futures/market/depth', {query:{symbol,limit}}); }
   klines(symbol, interval, limit=200) { return this.request('/api/v1/futures/market/kline', {query:{symbol,interval,limit}}); }
   tradingPairs() { return this.request('/api/v1/futures/market/trading_pairs'); }
   fundingRate(symbol) { return this.request('/api/v1/futures/market/funding_rate', {query:{symbol}}); }
   account(marginCoin = 'USDT') { return this.request('/api/v1/futures/account', {query:{marginCoin: String(marginCoin).toUpperCase()}, auth:true}); }
   async accountBalance(marginCoin = 'USDT') { return normalizeAccountBalance(await this.account(marginCoin), marginCoin); }
-  leverageAndMarginMode(symbol) { return this.request('/api/v1/futures/account/get_leverage_and_margin_mode', {query:{symbol}, auth:true}); }
+  leverageAndMarginMode(symbol, marginCoin = 'USDT') {
+    const query = {symbol, marginCoin: String(marginCoin).toUpperCase()};
+    return this.request('/api/v1/futures/account/get_leverage_margin_mode', {query, auth:true});
+  }
   positions(symbol) { return this.request('/api/v1/futures/position/get_pending_positions', {query:{symbol}, auth:true}); }
   positionHistory(symbol) { return this.request('/api/v1/futures/position/get_history_positions', {query:{symbol}, auth:true}); }
   pendingOrders(symbol) { return this.request('/api/v1/futures/trade/get_pending_orders', {query:{symbol}, auth:true}); }
   orderHistory(symbol) { return this.request('/api/v1/futures/trade/get_history_orders', {query:{symbol}, auth:true}); }
-  placeOrder(body) { return this.request('/api/v1/futures/trade/place_order', {method:'POST', body, auth:true, write:true}); }
+  async placeOrder(body) {
+    if (!canTrade()) throw new Error(NOT_ARMED);
+    return this.request('/api/v1/futures/trade/place_order', {method:'POST', body:preparePlaceOrder(body), auth:true, write:true});
+  }
   cancelOrder(body) { return this.request('/api/v1/futures/trade/cancel_orders', {method:'POST', body, auth:true, write:true}); }
   cancelAllOrders(body) { return this.request('/api/v1/futures/trade/cancel_all_orders', {method:'POST', body, auth:true, write:true}); }
   closeAllPosition(body) { return this.request('/api/v1/futures/trade/close_all_position', {method:'POST', body, auth:true, write:true}); }
   flashClosePosition(body) { return this.request('/api/v1/futures/trade/flash_close_position', {method:'POST', body, auth:true, write:true}); }
   changeLeverage(body) { return this.request('/api/v1/futures/account/change_leverage', {method:'POST', body, auth:true, write:true}); }
-  changeMarginMode(body) { return this.request('/api/v1/futures/account/change_margin_mode', {method:'POST', body, auth:true, write:true}); }
+  changeMarginMode(body) {
+    const mode = String(body?.marginMode ?? '').toUpperCase();
+    const apiBody = body && typeof body === 'object' && mode === 'ISOLATED' ? {...body, marginMode:'ISOLATION'} : body;
+    return this.request('/api/v1/futures/account/change_margin_mode', {method:'POST', body:apiBody, auth:true, write:true});
+  }
   changePositionMode(body) { return this.request('/api/v1/futures/account/change_position_mode', {method:'POST', body, auth:true, write:true}); }
-  placePositionTpsl(body) { return this.request('/api/v1/futures/tp_sl/place_position_tp_sl_order', {method:'POST', body, auth:true, write:true}); }
-  modifyPositionTpsl(body) { return this.request('/api/v1/futures/tp_sl/modify_position_tp_sl_order', {method:'POST', body, auth:true, write:true}); }
-  cancelTpsl(body) { return this.request('/api/v1/futures/tp_sl/cancel_tp_sl_order', {method:'POST', body, auth:true, write:true}); }
+  placePositionTpsl(body) { return this.request('/api/v1/futures/tpsl/position/place_order', {method:'POST', body, auth:true, write:true}); }
+  modifyPositionTpsl(body) { return this.request('/api/v1/futures/tpsl/position/modify_order', {method:'POST', body, auth:true, write:true}); }
+  cancelTpsl(body) { return this.request('/api/v1/futures/tpsl/cancel_order', {method:'POST', body, auth:true, write:true}); }
 }
